@@ -14,7 +14,8 @@
 
 namespace moveit_simple_wrapper
 {
-Robot::Robot(const std::string& tcp_name) : tcp_name_(tcp_name)
+Robot::Robot(const std::string& planning_group, const std::string& tcp_name)
+  : planning_group_(planning_group), tcp_name_(tcp_name)
 {
     // load robot model
     robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
@@ -24,7 +25,21 @@ Robot::Robot(const std::string& tcp_name) : tcp_name_(tcp_name)
     // load robot state
     robot_state_.reset(new robot_state::RobotState(robot_model_));
     robot_state_->setToDefaultValues();
-    joint_model_group_ = robot_model_->getJointModelGroup("manipulator");
+    joint_model_group_ = robot_model_->getJointModelGroup(planning_group_);
+
+    // create planning scene to for collision checking
+    planning_scene_.reset(new planning_scene::PlanningScene(robot_model_));
+    planning_scene_monitor_.reset(new planning_scene_monitor::PlanningSceneMonitor("robot_description"));
+    updatePlanningScene();
+}
+
+Robot::Robot(robot_model::RobotModelPtr robot_model, const std::string& planning_group, const std::string& tcp_name)
+  : robot_model_(robot_model), planning_group_(planning_group), tcp_name_(tcp_name)
+{
+    // load robot state
+    robot_state_.reset(new robot_state::RobotState(robot_model_));
+    robot_state_->setToDefaultValues();
+    joint_model_group_ = robot_model_->getJointModelGroup(planning_group_);
 
     // create planning scene to for collision checking
     planning_scene_.reset(new planning_scene::PlanningScene(robot_model_));

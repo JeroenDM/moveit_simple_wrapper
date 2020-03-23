@@ -27,6 +27,7 @@ class Robot
 
     bool check_collisions_ = true;
 
+    std::string planning_group_;
     std::string tcp_name_;
 
     /** \brief default timeout for inverse kinematic calculations.
@@ -36,7 +37,20 @@ class Robot
     const double DEFAULT_IK_TIMEOUT_ = 0.1;
 
   public:
-    Robot(const std::string& tcp_name = "tool0");
+    /** Main constructor.
+     *
+     * Can be used after the "demo.launch" file is launched
+     * from an existing MoveIt config for a robot.
+     * */
+    Robot(const std::string& planning_group = "manipulator", const std::string& tcp_name = "tool0");
+
+    /** Constructor that takes an existing robot model.
+     *
+     * Mainly useful for testing.
+     * */
+    Robot(robot_model::RobotModelPtr robot_model, const std::string& planning_group = "manipulator",
+          const std::string& tcp_name = "tool0");
+
     ~Robot() = default;
 
     /** \brief Calculate forward kinematics for default tcp_name (tool center point). */
