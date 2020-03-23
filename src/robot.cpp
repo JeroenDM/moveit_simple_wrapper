@@ -14,50 +14,50 @@
 
 namespace moveit_simple_wrapper
 {
-Robot::Robot(const std::string &tcp_frame) : tcp_frame_(tcp_frame)
+Robot::Robot(const std::string& tcp_name) : tcp_name_(tcp_name)
 {
     // load robot model
     robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
-    kinematic_model_ = robot_model_loader.getModel();
-    ROS_INFO("Model frame: %s", kinematic_model_->getModelFrame().c_str());
+    robot_model_ = robot_model_loader.getModel();
+    ROS_INFO("Model frame: %s", robot_model_->getModelFrame().c_str());
 
     // load robot state
-    kinematic_state_.reset(new robot_state::RobotState(kinematic_model_));
-    kinematic_state_->setToDefaultValues();
-    joint_model_group_ = kinematic_model_->getJointModelGroup("manipulator");
+    robot_state_.reset(new robot_state::RobotState(robot_model_));
+    robot_state_->setToDefaultValues();
+    joint_model_group_ = robot_model_->getJointModelGroup("manipulator");
 
     // create planning scene to for collision checking
-    planning_scene_.reset(new planning_scene::PlanningScene(kinematic_model_));
+    planning_scene_.reset(new planning_scene::PlanningScene(robot_model_));
     planning_scene_monitor_.reset(new planning_scene_monitor::PlanningSceneMonitor("robot_description"));
     updatePlanningScene();
 }
 
-const Transform &Robot::getLinkFixedRelativeTransform(const std::string &frame) const
+const Transform& Robot::getLinkFixedRelativeTransform(const std::string& frame) const
 {
-    return kinematic_model_->getLinkModel(frame)->getJointOriginTransform();
+    return robot_model_->getLinkModel(frame)->getJointOriginTransform();
 }
 
-const Transform &Robot::fk(const std::vector<double> &q) const
+const Transform& Robot::fk(const JointPositions& q) const
 {
-    kinematic_state_->setJointGroupPositions(joint_model_group_, q);
-    return kinematic_state_->getGlobalLinkTransform(tcp_frame_);
+    robot_state_->setJointGroupPositions(joint_model_group_, q);
+    return robot_state_->getGlobalLinkTransform(tcp_name_);
 }
 
-const Transform &Robot::fk(const std::vector<double> &q, const std::string &frame) const
+const Transform& Robot::fk(const JointPositions& q, const std::string& frame) const
 {
-    kinematic_state_->setJointGroupPositions(joint_model_group_, q);
-    return kinematic_state_->getGlobalLinkTransform(frame);
+    robot_state_->setJointGroupPositions(joint_model_group_, q);
+    return robot_state_->getGlobalLinkTransform(frame);
 }
 
-IKSolution Robot::ik(const Transform &tf)
+IKSolution Robot::ik(const Transform& tf)
 {
     double timeout = 0.1;
-    bool found_ik = kinematic_state_->setFromIK(joint_model_group_, tf, timeout);
+    bool found_ik = robot_state_->setFromIK(joint_model_group_, tf, timeout);
     IKSolution sol;
     if (found_ik)
     {
         std::vector<double> joint_values;
-        kinematic_state_->copyJointGroupPositions(joint_model_group_, joint_values);
+        robot_state_->copyJointGroupPositions(joint_model_group_, joint_values);
         sol.push_back(joint_values);
     }
     else
@@ -67,11 +67,11 @@ IKSolution Robot::ik(const Transform &tf)
     return sol;
 }
 
-Eigen::MatrixXd Robot::jacobian(const std::vector<double> &q)
+Eigen::MatrixXd Robot::jacobian(const JointPositions& q)
 {
     Eigen::Vector3d reference_point(0.0, 0.0, 0.0);
-    kinematic_state_->setJointGroupPositions(joint_model_group_, q);
-    return kinematic_state_->getJacobian(joint_model_group_);
+    robot_state_->setJointGroupPositions(joint_model_group_, q);
+    return robot_state_->getJacobian(joint_model_group_);
 }
 
 void Robot::updatePlanningScene()
@@ -84,18 +84,18 @@ void Robot::updatePlanningScene()
     planning_scene_->decoupleParent();
 }
 
-bool Robot::isInCollision(const std::vector<double> &joint_pose) const
+bool Robot::isColliding(const JointPositions& joint_pose) const
 {
     bool in_collision = false;
 
     // ROS_INFO("Checking for collision.");
     // planning_scene_->printKnownObjects(std::cout);
 
-    kinematic_state_->setJointGroupPositions(joint_model_group_, joint_pose);
-    in_collision = planning_scene_->isStateColliding(*kinematic_state_);
+    robot_state_->setJointGroupPositions(joint_model_group_, joint_pose);
+    in_collision = planning_scene_->isStateColliding(*robot_state_);
 
     // ros::V_string links;
-    // planning_scene_->getCollidingLinks(links, *kinematic_state_);
+    // planning_scene_->getCollidingLinks(links, *robot_state_);
     // for (auto l : links)
     // {
     //     std::cout << l << "\n";
@@ -103,12 +103,12 @@ bool Robot::isInCollision(const std::vector<double> &joint_pose) const
     return in_collision;
 }
 
-bool Robot::isPathColliding(const JointValues &q_from, const JointValues &q_to, int steps) const
+bool Robot::isPathColliding(const JointPositions& q_from, const JointPositions& q_to, int steps) const
 {
     for (int step = 0; step < steps; ++step)
     {
         auto q_step = interpolate(q_from, q_to, static_cast<double>(step) / (steps - 1));
-        if (isInCollision(q_step))
+        if (isColliding(q_step))
         {
             return true;
         }
@@ -116,13 +116,13 @@ bool Robot::isPathColliding(const JointValues &q_from, const JointValues &q_to, 
     return false;
 }
 
-void Robot::plot(moveit_visual_tools::MoveItVisualToolsPtr mvt, std::vector<double> &joint_pose,
-                 const rviz_visual_tools::colors &color)
+void Robot::plot(moveit_visual_tools::MoveItVisualToolsPtr mvt, JointPositions& joint_pose,
+                 const rviz_visual_tools::colors& color)
 {
     namespace rvt = rviz_visual_tools;
-    kinematic_state_->setJointGroupPositions(joint_model_group_, joint_pose);
-    mvt->publishRobotState(kinematic_state_, color);
+    robot_state_->setJointGroupPositions(joint_model_group_, joint_pose);
+    mvt->publishRobotState(robot_state_, color);
     mvt->trigger();
 }
 
-} // namespace moveit_simple_wrapper
+}  // namespace moveit_simple_wrapper
